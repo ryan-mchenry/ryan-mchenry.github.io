@@ -40,8 +40,21 @@
 
 <div class="container mt-5">
     <div class="row">
-        <div class="col-md-12 mb-4">
+        <div class="col-md-12 mb-3">
             <h2>ED Occupancy: Mortality Impact Calculator</h2>
+        </div>
+    </div>
+
+    <!-- UNCORKED Study Header / Disclaimer -->
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <!-- Replaced .alert with standard padding, rounded corners, and explicit text-dark -->
+            <div class="p-4 bg-white shadow-sm border rounded text-dark">
+                <p>This calculator is intended to visualise the results of the <strong>UNCORKED study</strong>, which demonstrated a relationship between Emergency Department occupancy and mortality. <em>(The study is currently in peer review; a hyperlink will be inserted here if accepted.)</em></p>
+                <p>The analysis assessed the relationship between Emergency Department occupancy—defined as the total number of patients in the department as a proportion of the total number of treatment spaces available—and mortality for admitted patients. The aim was to assess a simple metric of potential harms from crowding. The analysis adjusted for hospital type, as well as patient factors such as age, sex, and diagnosis.</p>
+                <hr>
+                <p class="mb-0 text-muted"><small><strong>Disclaimer:</strong> This calculator is intended only to visualise the results of the study, and more work is needed to validate its use as a clinical or operational tool.</small></p>
+            </div>
         </div>
     </div>
 
@@ -103,9 +116,9 @@
     // =======================================================
     // 1. CONFIGURATION (From your R Code)
     // =======================================================
-    const CALIB_INTERCEPT = -2.834175;
-    const BETA_OCCUPANCY  = 0.08645624;
-    const VAR_OCCUPANCY   = 0.001713856;
+    const CALIB_INTERCEPT = -2.828242;
+    const BETA_OCCUPANCY  = 0.08473219;
+    const VAR_OCCUPANCY   = 0.001698332;
     const BASELINE_OCC    = 1.0; 
     // =======================================================
 
