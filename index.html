@@ -52,6 +52,8 @@
             <div class="p-4 bg-white shadow-sm border rounded text-dark">
                 <p>This calculator is intended to visualise the results of the <strong>UNCORKED study</strong>, which demonstrated a relationship between Emergency Department occupancy and mortality. <em>(The study is currently in peer review; a hyperlink will be inserted here if accepted.)</em></p>
                 <p>The analysis assessed the relationship between Emergency Department occupancy—defined as the total number of patients in the department as a proportion of the total number of treatment spaces available—and mortality for admitted patients. The aim was to assess a simple metric of potential harms from crowding. The analysis adjusted for hospital type, as well as patient factors such as age, sex, and diagnosis.</p>
+                <p>The calculator output is the relative risk of mortality for admitted patients, compared to a baseline of 100% occupancy (i.e. the number of patients equals the number of treatment spaces). The calculator also provides a 95% confidence interval for this estimate.</p>.</p>
+
                 <hr>
                 <p class="mb-0 text-muted"><small><strong>Disclaimer:</strong> This calculator is intended only to visualise the results of the study, and more work is needed to validate its use as a clinical or operational tool.</small></p>
             </div>
@@ -113,19 +115,14 @@
 </div>
 
 <script>
+// =======================================================
+    // 1. CONFIGURATION (Updated to match paper's reported RR)
     // =======================================================
-    // 1. CONFIGURATION (From your R Code)
+    const RR_PER_10_PCT = 1.0076;     // Multivariable RR for 10% increase
+    const RR_LWR_PER_10_PCT = 1.0004; // Lower 95% CI bound
+    const RR_UPR_PER_10_PCT = 1.0148; // Upper 95% CI bound
+    const BASELINE_OCC = 1.0; 
     // =======================================================
-    const CALIB_INTERCEPT = -2.828242;
-    const BETA_OCCUPANCY  = 0.08473219;
-    const VAR_OCCUPANCY   = 0.001698332;
-    const BASELINE_OCC    = 1.0; 
-    // =======================================================
-
-    // Helper: Inverse Logit (Sigmoid)
-    function inv_logit(x) {
-        return 1.0 / (1.0 + Math.exp(-x));
-    }
 
     // Helper: Format Percentage
     function fmtPct(val, decimals = 1, showPlus = false) {
@@ -136,33 +133,33 @@
     }
 
     // MAIN STATISTICAL FUNCTION
-    // Replicates your 'get_relative_risk' R function exactly
     function get_relative_risk(occupancy) {
-        // A. Baseline Probability (P0)
-        const log_odds_base = CALIB_INTERCEPT + (BETA_OCCUPANCY * BASELINE_OCC);
-        const p0 = inv_logit(log_odds_base);
-
-        // B. Difference in Log-Odds
+        // 1. Calculate the absolute difference in occupancy
         const diff_occ = occupancy - BASELINE_OCC;
-        const log_or = BETA_OCCUPANCY * diff_occ;
+        
+        // 2. Calculate how many 10% (0.10) units this difference represents
+        const units = diff_occ / 0.10;
+        
+        // 3. Extrapolate the relative risk exponentially 
+        const rr_est = Math.pow(RR_PER_10_PCT, units);
+        
+        // Calculate confidence intervals based on exponential scaling
+        let rr_lwr = Math.pow(RR_LWR_PER_10_PCT, units);
+        let rr_upr = Math.pow(RR_UPR_PER_10_PCT, units);
 
-        // C. Standard Error of the Difference
-        const se_log_or = Math.abs(diff_occ) * Math.sqrt(VAR_OCCUPANCY);
-
-        // D. Interval on Odds Ratio Scale
-        const or_est = Math.exp(log_or);
-        const or_lwr = Math.exp(log_or - 1.96 * se_log_or);
-        const or_upr = Math.exp(log_or + 1.96 * se_log_or);
-
-        // E. Convert to Relative Risk (RR)
-        // Formula: RR = OR / (1 - p0 + (p0 * OR))
-        const rr_est = or_est / (1 - p0 + (p0 * or_est));
-        const rr_lwr = or_lwr / (1 - p0 + (p0 * or_lwr));
-        const rr_upr = or_upr / (1 - p0 + (p0 * or_upr));
+        // 4. Handle CI inversion for below-baseline occupancies
+        // When occupancy < 100% (units are negative), math.pow inverts the bounds 
+        // (the "upper" rate becomes a smaller number). This swap keeps the chart logic intact.
+        if (units < 0) {
+            const temp = rr_lwr;
+            rr_lwr = rr_upr;
+            rr_upr = temp;
+        }
 
         return { rr: rr_est, lwr: rr_lwr, upr: rr_upr };
     }
-
+    
+    // Initialize the chart   
     // Chart Global Variable
     let myChart = null;
 
