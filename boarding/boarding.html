@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ED Boarding: Mortality Impact Calculator</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/4.6.2/flatly/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Pinned versions: annotation plugin 2.x requires Chart.js 4.x -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
+
+    <style>
+        .well {
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            height: 100%;
+        }
+        .scorecard-occ  { background-color: #f7f9fa; border-left: 5px solid #2c3e50; }
+        .scorecard-risk { background-color: #f7f9fa; border-left: 5px solid #e74c3c; }
+        .risk-text-positive { color: #e74c3c; font-weight: bold; }
+        .risk-text-negative { color: #27ae60; font-weight: bold; }
+        .risk-text-neutral  { color: #2c3e50; font-weight: bold; }
+        .sub-note { font-size: 0.9em; color: #7f8c8d; }
+        .extrap-warning { font-size: 0.85em; color: #b9770e; margin-top: 6px; }
+        .footer-note { text-align: right; font-style: italic; color: #95a5a6; margin-top: 10px; }
+        .config-banner { border-left: 5px solid #f39c12; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container mt-5 mb-5">
+    <div class="row">
+        <div class="col-md-12 mb-3">
+            <h2>ED Boarding: Mortality Impact Calculator</h2>
+        </div>
+    </div>
+
+    <!-- Shown only while illustrative values are in the configuration block -->
+    <div class="row" id="config_banner" style="display:none;">
+        <div class="col-md-12 mb-3">
+            <div class="p-3 bg-white border rounded config-banner text-dark">
+                <strong>Illustrative values.</strong> The relative risk and data-range constants in this page
+                are placeholders, not study results. Replace them with the published estimates before sharing.
+            </div>
+        </div>
+    </div>
+
+    <!-- UNCORKED study header / disclaimer -->
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <div class="p-4 bg-white shadow-sm border rounded text-dark">
+                <p>This calculator visualises results from the <strong>UNCORKED study</strong> on emergency department boarding and mortality.
+                   <em>(The study is currently in press; a link will be added when it is available online.)</em></p>
+                <p>Boarded patients are those who have been admitted but remain in the emergency department while waiting for an inpatient bed.
+                   Boarding occupancy is the number of boarded patients divided by the number of ED treatment spaces (cubicles).
+                   The analysis assessed whether boarding occupancy when a patient arrived was associated with 28-day mortality among patients admitted from the ED,
+                   adjusting for age, sex, diagnosis group, hospital type and recruitment snapshot, with allowance for clustering of patients within hospitals.</p>
+                <p>The calculator shows the relative risk of 28-day mortality for admitted patients at the entered level of boarding,
+                   compared with a reference level that you set (by default, no boarded patients), with a 95% confidence interval.</p>
+                <hr>
+                <p class="mb-0 text-muted"><small><strong>Disclaimer:</strong> This is an observational association, not proof that boarding causes the difference in risk.
+                   The calculator is intended only to visualise the study results; further work is needed before it could be used as a clinical or operational tool.</small></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">Current status</div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="spaces">ED treatment spaces (cubicles)</label>
+                        <input type="number" id="spaces" class="form-control" value="40" min="1" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="boarders">Boarded patients in the department</label>
+                        <input type="number" id="boarders" class="form-control" value="12" min="0" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="ref_boarders">Compare with (boarded patients)</label>
+                        <input type="number" id="ref_boarders" class="form-control" value="0" min="0" step="1">
+                        <small class="form-text text-muted">Default 0: no boarding. Set a target level to compare against instead.</small>
+                    </div>
+                    <div id="input_error" class="text-danger small" style="display:none;"></div>
+                    <hr>
+                    <p class="text-muted small mb-1">Reference boarding occupancy: <span id="baseline_lbl">0%</span>.</p>
+                    <p class="text-muted small mb-0">Positive percentages indicate higher mortality risk than at the reference level.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <div class="well scorecard-occ">
+                        <h5>Boarding occupancy</h5>
+                        <h2 id="current_occ_text">0.0%</h2>
+                        <div class="sub-note" id="occ_sub_text">boarded patients per treatment space</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="well scorecard-risk">
+                        <h5>Change in mortality risk</h5>
+                        <h2 id="risk_text" class="risk-text-positive">+0.0%</h2>
+                        <div id="risk_ci_text" class="sub-note">(95% CI: 0.0% to 0.0%)</div>
+                        <div id="extrap_text" class="extrap-warning" style="display:none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Projected change in risk by boarding occupancy</div>
+                <div class="card-body">
+                    <canvas id="riskChart" height="200"></canvas>
+                    <div class="footer-note">Shaded band: 95% confidence interval. Grey area: beyond the range of the study data.</div>
+                </div>
+            </div>
+
+            <p class="text-muted small mt-3">
+                Method: the change in risk is calculated from the study's relative risk per 10% increase in boarding occupancy
+                (10 additional boarded patients per 100 treatment spaces), applied multiplicatively across the difference between the entered and reference levels.
+                This relative risk is averaged over the patients in the study, so it is an approximation for any individual department.
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+// =======================================================
+// 1. CONFIGURATION — replace with published values
+// =======================================================
+// From R:
+//   rr_boarding_10            -> estimate, conf.low, conf.high (multivariable, m_board)
+//   quantile(d$boarding_occupancy, 0.99)  -> MAX_OBSERVED_RATIO
+const ILLUSTRATIVE_VALUES = true;      // set to false once the constants below are the published ones
+
+const RR_PER_01     = 1.040;           // RR per 0.1 increase in boarding occupancy
+const RR_LWR_PER_01 = 1.020;           // lower 95% CI bound
+const RR_UPR_PER_01 = 1.070;           // upper 95% CI bound
+const MAX_OBSERVED_RATIO = 1.55;       // upper limit of the study data used for the curve (e.g. 99th centile)
+const X_AXIS_MAX = 1.80;                // chart x-axis limit
+// =======================================================
+
+function fmtPct(val, decimals = 1, showPlus = false) {
+    const p = val * 100;
+    const s = p.toFixed(decimals) + "%";
+    return (showPlus && p > 0) ? "+" + s : s;
+}
+
+// Relative risk at boarding ratio `ratio` versus reference ratio `ref`.
+// Log-linear in the ratio: RR^(difference / 0.1). The CI bounds transform the same
+// way; for negative differences the bounds swap, so order them explicitly.
+function get_relative_risk(ratio, ref) {
+    const units = (ratio - ref) / 0.10;
+    const est = Math.pow(RR_PER_01, units);
+    const a = Math.pow(RR_LWR_PER_01, units);
+    const b = Math.pow(RR_UPR_PER_01, units);
+    return { rr: est, lwr: Math.min(a, b), upr: Math.max(a, b) };
+}
+
+function readInt(id) {
+    const v = Number(document.getElementById(id).value);
+    return Number.isFinite(v) ? v : NaN;
+}
+
+let myChart = null;
+
+function updateDashboard() {
+    const spaces = readInt('spaces');
+    const boarders = readInt('boarders');
+    const refBoarders = readInt('ref_boarders');
+    const errEl = document.getElementById('input_error');
+
+    if (!(spaces >= 1) || !(boarders >= 0) || !(refBoarders >= 0)) {
+        errEl.innerText = "Enter at least 1 treatment space and zero or more boarded patients.";
+        errEl.style.display = "block";
+        return;
+    }
+    errEl.style.display = "none";
+
+    const ratio = boarders / spaces;
+    const refRatio = refBoarders / spaces;
+    const res = get_relative_risk(ratio, refRatio);
+    const change = res.rr - 1, lwr = res.lwr - 1, upr = res.upr - 1;
+
+    document.getElementById('current_occ_text').innerText = fmtPct(ratio, 1);
+    document.getElementById('occ_sub_text').innerText =
+        `${boarders} boarded patient${boarders === 1 ? "" : "s"} in ${spaces} treatment space${spaces === 1 ? "" : "s"}`;
+    document.getElementById('baseline_lbl').innerText = fmtPct(refRatio, 1);
+
+    const riskEl = document.getElementById('risk_text');
+    riskEl.innerText = fmtPct(change, 1, true);
+    riskEl.className = Math.abs(change) < 0.0005 ? "risk-text-neutral"
+                     : change > 0 ? "risk-text-positive" : "risk-text-negative";
+
+    document.getElementById('risk_ci_text').innerText =
+        `(95% CI: ${fmtPct(lwr, 1, lwr > 0)} to ${fmtPct(upr, 1, upr > 0)})`;
+
+    const extrapEl = document.getElementById('extrap_text');
+    const outside = [ratio, refRatio].some(r => r > MAX_OBSERVED_RATIO);
+    extrapEl.style.display = outside ? "block" : "none";
+    extrapEl.innerText = outside
+        ? `Boarding above ${fmtPct(MAX_OBSERVED_RATIO, 0)} is beyond the range of the study data, so this estimate is an extrapolation.`
+        : "";
+
+    updateChart(ratio, change, refRatio);
+}
+
+function buildCurve(refRatio) {
+    const est = [], lwr = [], upr = [];
+    const n = 120;
+    for (let i = 0; i <= n; i++) {
+        const x = (X_AXIS_MAX / n) * i;
+        const r = get_relative_risk(x, refRatio);
+        est.push({ x, y: r.rr - 1 });
+        lwr.push({ x, y: r.lwr - 1 });
+        upr.push({ x, y: r.upr - 1 });
+    }
+    return { est, lwr, upr };
+}
+
+function updateChart(userRatio, userChange, refRatio) {
+    const curve = buildCurve(refRatio);
+
+    if (myChart) {
+        myChart.data.datasets[0].data = curve.upr;
+        myChart.data.datasets[1].data = curve.lwr;
+        myChart.data.datasets[2].data = curve.est;
+        myChart.data.datasets[3].data = [{ x: Math.min(userRatio, X_AXIS_MAX), y: userChange }];
+        myChart.options.plugins.annotation.annotations.refLine.xMin = refRatio;
+        myChart.options.plugins.annotation.annotations.refLine.xMax = refRatio;
+        myChart.update('none');
+        return;
+    }
+
+    const ctx = document.getElementById('riskChart').getContext('2d');
+    myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: [
+                { label: 'Upper CI', data: curve.upr, borderColor: 'transparent',
+                  backgroundColor: 'rgba(231, 76, 60, 0.2)', fill: '+1', pointRadius: 0 },
+                { label: 'Lower CI', data: curve.lwr, borderColor: 'transparent',
+                  backgroundColor: 'transparent', fill: false, pointRadius: 0 },
+                { label: 'Projected change', data: curve.est, borderColor: '#c0392b',
+                  borderWidth: 2, fill: false, pointRadius: 0 },
+                { label: 'Your department', type: 'scatter',
+                  data: [{ x: Math.min(userRatio, X_AXIS_MAX), y: userChange }],
+                  borderColor: '#2c3e50', backgroundColor: '#2c3e50',
+                  pointRadius: 6, pointHoverRadius: 8 }
+            ]
+        },
+        options: {
+            responsive: true,
+            animation: false,
+            parsing: true,
+            interaction: { intersect: false, mode: 'nearest', axis: 'x' },
+            scales: {
+                x: {
+                    type: 'linear', min: 0, max: X_AXIS_MAX,
+                    title: { display: true, text: 'Boarding occupancy (boarded patients per treatment space)' },
+                    ticks: { callback: v => fmtPct(v, 0) }
+                },
+                y: {
+                    title: { display: true, text: 'Change in 28-day mortality risk' },
+                    ticks: { callback: v => fmtPct(v, 0) }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => items.length ? 'Boarding occupancy ' + fmtPct(items[0].parsed.x, 0) : '',
+                        label: c => {
+                            const y = fmtPct(c.parsed.y, 1, c.parsed.y > 0);
+                            if (c.dataset.label === 'Upper CI') return 'Upper 95%: ' + y;
+                            if (c.dataset.label === 'Lower CI') return 'Lower 95%: ' + y;
+                            if (c.dataset.label === 'Your department') return 'Your department: ' + y;
+                            return 'Change in risk: ' + y;
+                        }
+                    }
+                },
+                annotation: {
+                    annotations: {
+                        zeroLine: {
+                            type: 'line', yMin: 0, yMax: 0,
+                            borderColor: '#7f8c8d', borderWidth: 1, borderDash: [5, 5],
+                            label: { content: 'No change', display: true, position: 'start',
+                                     backgroundColor: 'rgba(255,255,255,0.8)', color: '#7f8c8d', yAdjust: -10 }
+                        },
+                        refLine: {
+                            type: 'line', xMin: refRatio, xMax: refRatio,
+                            borderColor: '#7f8c8d', borderWidth: 1, borderDash: [2, 2]
+                        },
+                        beyondData: {
+                            type: 'box', xMin: MAX_OBSERVED_RATIO, xMax: X_AXIS_MAX,
+                            backgroundColor: 'rgba(127, 140, 141, 0.12)', borderWidth: 0,
+                            label: { content: 'Beyond study data', display: true, position: { x: 'center', y: 'start' },
+                                     color: '#7f8c8d', font: { size: 11 } }
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+if (ILLUSTRATIVE_VALUES) document.getElementById('config_banner').style.display = 'block';
+['spaces', 'boarders', 'ref_boarders'].forEach(id =>
+    document.getElementById(id).addEventListener('input', updateDashboard));
+updateDashboard();
+</script>
+</body>
+</html>
